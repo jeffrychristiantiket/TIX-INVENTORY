@@ -16,6 +16,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -38,6 +39,9 @@ public class SyncService {
   //hotel_mongo_id, hotelId, lastPublicId, expectedPublicId
   public static final List<String> HOTEL_HEADER =
       Arrays.asList("hotel_mongo_id".trim(), "hotelId".trim(), "lastPublicId".trim(), "expectedPublicId".trim());
+
+  @Value("${hotel.core.host}")
+  private String hotelCoreHost;
 
   /**
    * replace hotel publicId with expectedPublicId by mongoId
@@ -67,97 +71,130 @@ public class SyncService {
    *
    */
   public void rollbackHotelPublicId(MultipartFile file) {
+    var factory = new SimpleClientHttpRequestFactory();
+    factory.setConnectTimeout(15000);
+    factory.setReadTimeout(15000);
+    RestTemplate restTemplate = new RestTemplate(factory);
       try (InputStream inputStream = file.getInputStream()) {
         String data = new String(FileCopyUtils.copyToByteArray(inputStream));
         List<String> lines = validateCsvHeaderAndReturnsCsvDataStrings(data, HOTEL_HEADER);
+        String hotelMongoId = "";
+        String hotelId = "";
+        String lastPublicId = "";
+        String expectedPublicId = "";
+        int count = 0;
         for (String line : lines) {
-          String[] split = line.split(",");
-          String hotelMongoId = split[1];
-          String hotelId = split[2];
-          String lastPublicId = split[3];
-          String expectedPublicId = split[4];
+          System.out.println("count : " + ++count);
+          try {
+            Thread.sleep(100L);
+            String[] split = line.split(",");
+            hotelMongoId = split[0];
+            hotelId = split[1];
+            lastPublicId = split[2];
+            expectedPublicId = split[3];
+            System.out.println("hotelMongoId : " + hotelMongoId);
+            System.out.println("Hotel ID : " + hotelId);
+            System.out.println("lastPublicId : " + lastPublicId);
+            System.out.println("expectedPublicId : " + expectedPublicId);
 
-          var factory = new SimpleClientHttpRequestFactory();
-          factory.setConnectTimeout(3000);
-          factory.setReadTimeout(3000);
-          RestTemplate restTemplate = new RestTemplate(factory);
-          LinkedMultiValueMap<String, String> headers = defaultHeaders();
+            LinkedMultiValueMap<String, String> headers = defaultHeaders();
 
-          String url;
-          String urlTemplate;
-          HttpEntity<String> entity;
-          Map<String, String> params;
-          ResponseEntity<String> response;
+            String url;
+            String urlTemplate;
+            HttpEntity<String> entity;
+            Map<String, String> params;
+            ResponseEntity<String> response;
 
-          // replace hotel publicId with expectedPublicId by mongoId
-          response = replaceHotelPublicIdWithExpectedPublicIdByMongoId(hotelMongoId, expectedPublicId, restTemplate, headers);
+            // replace hotel publicId with expectedPublicId by mongoId
+            response = replaceHotelPublicIdWithExpectedPublicIdByMongoId(hotelMongoId,
+                expectedPublicId, restTemplate, headers);
 
-          if (!response.getStatusCode().is2xxSuccessful()) {
-            LOGGER.error("ERROR replace hotel mongoId : {}, hotelId : {}, publicId : {}", hotelMongoId, hotelId, expectedPublicId);
-            continue;
-          }
-
-          // publish hotel to b2c by hotelId
-          headers = publishHotelToB2c(hotelMongoId, hotelId, expectedPublicId, restTemplate);
-          if (headers == null) {
-            continue;
-          }
-
-          // get hotel redirections by lastPublicId then do soft delete
-          response = getHotelRedirectionsByLastPublicId(lastPublicId, restTemplate, headers);
-          BaseResponse<List<HotelRedirection>> baseResponse = null;
-          if (response.getStatusCode().is2xxSuccessful()) {
-            String b = response.getBody();
-            baseResponse = JSONHelper.convertJsonInStringToObject(b, new TypeReference<>() {});
-          }
-
-          if (!response.getStatusCode().is2xxSuccessful()) {
-            LOGGER.error("ERROR get hotel redirections | hotel mongoId : {}, hotelId : {}, publicId : {}", hotelMongoId, hotelId, expectedPublicId);
-            continue;
-          }
-
-          if (baseResponse != null && !CollectionUtils.isEmpty(baseResponse.getData())) {
-            // soft delete hotel redirections by mongoId
-            url = "http://192.168.64.39:7040/tix-hotel-core/hotel-redirection/{mongoId}";
-            entity = new HttpEntity<>(headers);
-            urlTemplate = UriComponentsBuilder.fromHttpUrl(url)
-                .queryParam("mongoId", "{mongoId}")
-                .encode()
-                .toUriString();
-            for (HotelRedirection redirection : baseResponse.getData()) {
-              params = new HashMap<>();
-              params.put("mongoId", redirection.getId());
-              response = restTemplate.exchange(urlTemplate, HttpMethod.DELETE, entity, String.class, params);
-              if (response.getStatusCode().is2xxSuccessful()) {
-                String b = response.getBody();
-                System.out.println(b);
-              }
-
-              if (!response.getStatusCode().is2xxSuccessful()) {
-                LOGGER.error("ERROR soft delete hotel redirection | hotel mongoId : {}, hotelId : {}, publicId : {}", hotelMongoId, hotelId, expectedPublicId);
-                continue;
-              }
-
-              //publish hotel redirection by mongoId
-              url = "http://192.168.64.39:7040/tix-hotel-core/hotel-redirection/publish/{id}";
-              entity = new HttpEntity<>(headers);
-              urlTemplate = UriComponentsBuilder.fromHttpUrl(url)
-                  .queryParam("id", "{id}")
-                  .encode()
-                  .toUriString();
-              params = new HashMap<>();
-              params.put("id", redirection.getId());
-              response = restTemplate.exchange(urlTemplate, HttpMethod.GET, entity, String.class, params);
-              if (response.getStatusCode().is2xxSuccessful()) {
-                String b = response.getBody();
-                System.out.println(b);
-              }
-              if (!response.getStatusCode().is2xxSuccessful()) {
-                LOGGER.error("ERROR publish hotel redirection | hotel mongoId : {}, hotelId : {}, publicId : {}", hotelMongoId, hotelId, expectedPublicId);
-              }
+            if (!response.getStatusCode().is2xxSuccessful()) {
+              LOGGER.error("ERROR replace hotel mongoId : {}, hotelId : {}, publicId : {}",
+                  hotelMongoId, hotelId, expectedPublicId);
+              continue;
             }
-          } else {
-            LOGGER.warn("hotel does not have redirection | hotel mongoId : {}, hotelId : {}, publicId : {}", hotelMongoId, hotelId, expectedPublicId);
+
+            // publish hotel to b2c by hotelId
+            Thread.sleep(100L);
+            headers = publishHotelToB2c(hotelMongoId, hotelId, expectedPublicId, restTemplate);
+            if (headers == null) {
+              continue;
+            }
+
+            // get hotel redirections by lastPublicId then do soft delete
+            Thread.sleep(100L);
+            response = getHotelRedirectionsByLastPublicId(lastPublicId, restTemplate, headers);
+            BaseResponse<List<HotelRedirection>> baseResponse = null;
+            if (response.getStatusCode().is2xxSuccessful()) {
+              String b = response.getBody();
+              System.out.println("GET HOTEL REDIRECTION SUCCESS");
+              baseResponse = JSONHelper.convertJsonInStringToObject(b, new TypeReference<>() {
+              });
+            }
+
+            if (!response.getStatusCode().is2xxSuccessful()) {
+              LOGGER.error(
+                  "ERROR get hotel redirections | hotel mongoId : {}, hotelId : {}, publicId : {}",
+                  hotelMongoId, hotelId, expectedPublicId);
+              continue;
+            }
+
+            if (baseResponse != null && !CollectionUtils.isEmpty(baseResponse.getData())) {
+              for (HotelRedirection redirection : baseResponse.getData()) {
+                // soft delete hotel redirections by mongoId
+                url = hotelCoreHost + "/tix-hotel-core/hotel-redirection/{mongoId}";
+                entity = new HttpEntity<>(headers);
+                urlTemplate = UriComponentsBuilder.fromHttpUrl(url)
+                    .queryParam("mongoId", "{mongoId}")
+                    .encode()
+                    .toUriString();
+                params = new HashMap<>();
+                params.put("mongoId", redirection.getId());
+                Thread.sleep(100L);
+                response = restTemplate.exchange(urlTemplate, HttpMethod.DELETE, entity,
+                    String.class, params);
+                if (response.getStatusCode().is2xxSuccessful()) {
+                  String b = response.getBody();
+                  System.out.println("SOFT DELETE SUCCESS - " + b);
+                }
+
+                if (!response.getStatusCode().is2xxSuccessful()) {
+                  LOGGER.error(
+                      "ERROR soft delete hotel redirection | hotel mongoId : {}, hotelId : {}, publicId : {}",
+                      hotelMongoId, hotelId, expectedPublicId);
+                  continue;
+                }
+
+                //publish hotel redirection by mongoId
+                url = hotelCoreHost + "/tix-hotel-core/hotel-redirection/publish/{id}";
+                entity = new HttpEntity<>(headers);
+                urlTemplate = UriComponentsBuilder.fromHttpUrl(url)
+                    .queryParam("id", "{id}")
+                    .encode()
+                    .toUriString();
+                params = new HashMap<>();
+                params.put("id", redirection.getId());
+                Thread.sleep(100L);
+                response = restTemplate.exchange(urlTemplate, HttpMethod.GET, entity, String.class,
+                    params);
+                if (response.getStatusCode().is2xxSuccessful()) {
+                  String b = response.getBody();
+                  System.out.println("PUBLISH HOTEL REDIRECT SUCCESS - " + b);
+                }
+                if (!response.getStatusCode().is2xxSuccessful()) {
+                  LOGGER.error(
+                      "ERROR publish hotel redirection | hotel mongoId : {}, hotelId : {}, publicId : {}",
+                      hotelMongoId, hotelId, expectedPublicId);
+                }
+              }
+            } else {
+              LOGGER.warn(
+                  "hotel does not have redirection | hotel mongoId : {}, hotelId : {}, publicId : {}",
+                  hotelMongoId, hotelId, expectedPublicId);
+            }
+          } catch (Exception e) {
+            System.out.println("ERROR hotel id : " + hotelId + " - msg - " + e.getMessage() + e);
           }
         }
       } catch (Exception e) {
@@ -173,7 +210,7 @@ public class SyncService {
     ResponseEntity<String> response;
     String url;
     HttpEntity<String> entity;
-    url = "http://192.168.64.39:7040/tix-hotel-core/hotel-redirection/all-by-target-public-id/{targetPublicId}";
+    url = hotelCoreHost + "/tix-hotel-core/hotel-redirection/all-by-target-public-id/{targetPublicId}";
     entity = new HttpEntity<>(headers);
     urlTemplate = UriComponentsBuilder.fromHttpUrl(url)
         .queryParam("targetPublicId", "{targetPublicId}")
@@ -196,14 +233,14 @@ public class SyncService {
     ResponseEntity<String> response;
     headers.set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
     headers.set(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
-    url = "http://192.168.64.39:7040/tix-hotel-core/hotel/sync-hotel-to-search";
+    url = hotelCoreHost + "/tix-hotel-core/hotel/sync-hotel-to-search";
     SyncHotelToSearchRequest request = SyncHotelToSearchRequest.builder().hotelIds(hotelId).build();
     json = JSONHelper.convertObjectToJsonInString(request);
     entity = new HttpEntity<>(json, headers);
     response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
     if (response.getStatusCode().is2xxSuccessful()) {
       String b = response.getBody();
-      System.out.println(b);
+      System.out.println("PUBLISH HOTEL TO B2C SUCCESS - " + b);
     }
 
     if (!response.getStatusCode().is2xxSuccessful()) {
@@ -240,7 +277,7 @@ public class SyncService {
     QueryRequest body = QueryRequest.builder().publicId(expectedPublicId).build();
     json = JSONHelper.convertObjectToJsonInString(body);
     entity = new HttpEntity<>(json, headers);
-    url = "http://192.168.64.39:7040/tix-hotel-core/master/execute-query";
+    url = hotelCoreHost + "/tix-hotel-core/master/execute-query";
     urlTemplate = UriComponentsBuilder.fromHttpUrl(url)
         .queryParam("queryUpdateType", "{queryUpdateType}")
         .queryParam("collectionName", "{collectionName}")
@@ -255,7 +292,7 @@ public class SyncService {
     ResponseEntity<String> response = restTemplate.exchange(urlTemplate, HttpMethod.POST, entity, String.class, params);
     if (response.getStatusCode().is2xxSuccessful()) {
       String b = response.getBody();
-      System.out.println(b);
+      System.out.println("REPLACE PUBLIC ID SUCCESS - " + b);
     }
     return response;
   }
