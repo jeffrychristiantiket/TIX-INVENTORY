@@ -12,17 +12,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.FileCopyUtils;
@@ -32,16 +28,12 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
-public class SyncService {
+public class SyncService extends BaseService {
   private static final Logger LOGGER = LoggerFactory.getLogger(SyncService.class);
-  public static final String CSV_SPLIT_REGEX = ",(?=([^\"]*\"[^\"]*\")*[^\"]*$)";
 
   //hotel_mongo_id, hotelId, lastPublicId, expectedPublicId
   public static final List<String> HOTEL_HEADER =
       Arrays.asList("hotel_mongo_id".trim(), "hotelId".trim(), "lastPublicId".trim(), "expectedPublicId".trim());
-
-  @Value("${hotel.core.host}")
-  private String hotelCoreHost;
 
   /**
    * replace hotel publicId with expectedPublicId by mongoId
@@ -71,10 +63,6 @@ public class SyncService {
    *
    */
   public void rollbackHotelPublicId(MultipartFile file) {
-    var factory = new SimpleClientHttpRequestFactory();
-    factory.setConnectTimeout(15000);
-    factory.setReadTimeout(15000);
-    RestTemplate restTemplate = new RestTemplate(factory);
       try (InputStream inputStream = file.getInputStream()) {
         String data = new String(FileCopyUtils.copyToByteArray(inputStream));
         List<String> lines = validateCsvHeaderAndReturnsCsvDataStrings(data, HOTEL_HEADER);
@@ -176,8 +164,7 @@ public class SyncService {
                 params = new HashMap<>();
                 params.put("id", redirection.getId());
                 Thread.sleep(100L);
-                response = restTemplate.exchange(urlTemplate, HttpMethod.GET, entity, String.class,
-                    params);
+                response = restTemplate.exchange(urlTemplate, HttpMethod.GET, entity, String.class, params);
                 if (response.getStatusCode().is2xxSuccessful()) {
                   String b = response.getBody();
                   System.out.println("PUBLISH HOTEL REDIRECT SUCCESS - " + b);
@@ -251,18 +238,6 @@ public class SyncService {
     return headers;
   }
 
-  private LinkedMultiValueMap<String, String> defaultHeaders() {
-    LinkedMultiValueMap<String, String> headers = new LinkedMultiValueMap<>();
-    headers.set(HttpHeaders.ACCEPT, MediaType.ALL_VALUE);
-    headers.add("storeId", "TIKETCOM");
-    headers.add("channelId", "WEB");
-    headers.add("requestId", UUID.randomUUID().toString());
-    headers.add("serviceId", "TIX-INVENTORY");
-    headers.add("username", "tiket");
-    headers.add("lang", "en");
-    return headers;
-  }
-
   private ResponseEntity<String> replaceHotelPublicIdWithExpectedPublicIdByMongoId(String hotelMongoId,
       String expectedPublicId, RestTemplate restTemplate,
       LinkedMultiValueMap<String, String> headers) throws JsonProcessingException {
@@ -295,31 +270,6 @@ public class SyncService {
       System.out.println("REPLACE PUBLIC ID SUCCESS - " + b);
     }
     return response;
-  }
-
-  public static Boolean isCsvHeaderValid(List<String> expectedHeaders, List<String> actualHeaders) {
-    Integer countActual = actualHeaders.size();
-    Integer countExpected = 0;
-
-    for (String header : expectedHeaders) {
-      if (actualHeaders.contains(header.trim())) {
-        countExpected = countExpected + 1;
-      }
-    }
-
-    return countExpected.equals(countActual);
-  }
-
-  public static List<String> validateCsvHeaderAndReturnsCsvDataStrings(String csvDataString,
-      List<String> allowedHeader) throws Exception {
-    List<String> csvRows = Arrays.stream(csvDataString.split("\n"))
-        .collect(Collectors.toList());
-    List<String> csvHeader = Arrays.asList(csvRows.remove(0)
-        .split(CSV_SPLIT_REGEX));
-    if (!isCsvHeaderValid(csvHeader, allowedHeader)) {
-      throw new Exception();
-    }
-    return csvRows;
   }
 
 }

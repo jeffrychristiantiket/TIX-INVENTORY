@@ -10,9 +10,8 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class QueryRequest implements Serializable {
+public class QueryReplaceAtlasIdRequest implements Serializable {
 
-  private static final long serialVersionUID = 4070183540533260503L;
-  private String publicId;
-  private Integer isDeleted;
+  private static final long serialVersionUID = -2153257075575521303L;
+  private String atlasId;
 }
