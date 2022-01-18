@@ -2,6 +2,7 @@ package com.tiket.inventory.service;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,9 +31,9 @@ public class BaseService {
     headers.set(HttpHeaders.ACCEPT, MediaType.ALL_VALUE);
     headers.add("storeId", "TIKETCOM");
     headers.add("channelId", "WEB");
-    headers.add("requestId", "23123123");
-    headers.add("serviceId", "gateway");
-    headers.add("username", "username");
+    headers.add("requestId", UUID.randomUUID().toString());
+    headers.add("serviceId", "SWAGGER");
+    headers.add("username", "support@tiket.com");
     headers.add("lang", "en");
     return headers;
   }

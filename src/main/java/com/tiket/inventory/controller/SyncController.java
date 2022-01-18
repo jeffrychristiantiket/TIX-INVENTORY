@@ -56,7 +56,7 @@ public class SyncController {
 
   @RequestMapping(path = "/publish-hotel", method = RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity publishHotel(@RequestParam("file") MultipartFile file) {
-    publishHotel.publishHotel(file);
+    publishHotel.publishHotel(file).subscribe();
     return ResponseEntity.ok("ok");
   }
 
@@ -78,7 +78,7 @@ public class SyncController {
       @RequestParam(value = "vendorExternalIds", required = false) String vendorExternalIds,
       @RequestParam(value = "vendor", required = false) String vendor,
       @RequestParam(value = "unSyncRaw", defaultValue = "false") Boolean unSyncRaw) {
-    syncHotelRawToHotel.sync(vendorExternalIds, vendor, unSyncRaw, file);
+    syncHotelRawToHotel.sync(vendorExternalIds, vendor, unSyncRaw, file).subscribe();
     return ResponseEntity.ok("ok");
   }
 
