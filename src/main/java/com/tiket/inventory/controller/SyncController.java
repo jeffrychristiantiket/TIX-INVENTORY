@@ -1,13 +1,16 @@
 package com.tiket.inventory.controller;
-
-
 import com.tiket.inventory.service.CheckHotelLocationsByLonLat;
+import com.tiket.inventory.service.CronUploadImageToLightRoomCdn;
 import com.tiket.inventory.service.PublishHotel;
+import com.tiket.inventory.service.SoftDeleteHotelRawService;
 import com.tiket.inventory.service.SyncAtlasIdService;
 import com.tiket.inventory.service.SyncHotelRawToHotel;
 import com.tiket.inventory.service.SyncIsDeleted;
+import com.tiket.inventory.service.SyncIsDeletedAndIsSync;
 import com.tiket.inventory.service.SyncMissingAtlasIdByLocationMongoId;
 import com.tiket.inventory.service.SyncService;
+import com.tiket.inventory.service.UnSyncRawService;
+import com.tiket.inventory.service.UnsetRoomLacertaHash;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +44,21 @@ public class SyncController {
 
   @Autowired
   SyncMissingAtlasIdByLocationMongoId syncMissingAtlasIdByLocationMongoId;
+
+  @Autowired
+  SyncIsDeletedAndIsSync syncIsDeletedAndIsSync;
+
+  @Autowired
+  UnsetRoomLacertaHash unsetRoomLacertaHash;
+
+  @Autowired
+  UnSyncRawService unSyncRawService;
+
+  @Autowired
+  SoftDeleteHotelRawService softDeleteHotelRawService;
+
+  @Autowired
+  CronUploadImageToLightRoomCdn cronUploadImageToLightRoomCdn;
 
   @RequestMapping(path = "/hotel", method = RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity syncHotel(@RequestParam("file") MultipartFile file) {
@@ -90,4 +108,49 @@ public class SyncController {
     return ResponseEntity.ok("ok");
   }
 
+  @RequestMapping(path = "/sync-deleted-room-raw", method = RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity replaceDeletedAndIsSync(
+      @RequestParam("file") MultipartFile file) {
+//    syncIsDeletedAndIsSync.replaceDeletedAndIsSync(file);
+    return ResponseEntity.ok("ok");
+  }
+
+  @RequestMapping(path = "/unsync-raw-by-collection", method = RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity unSyncRawByCollectionNameAndMongoId(
+      @RequestParam String collectionName,
+      @RequestParam("file") MultipartFile file) {
+    unSyncRawService.unSyncRaw(file, collectionName);
+    return ResponseEntity.ok("ok");
+  }
+
+  @RequestMapping(path = "/unset-room-lacerta-hash", method = RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity unsetRoomLacertaHash(
+      @RequestParam("file") MultipartFile file) {
+    unsetRoomLacertaHash.unsetLacertaHash(file);
+    return ResponseEntity.ok("ok");
+  }
+
+  @RequestMapping(path = "/soft-delete-hotel-raw-by-vendor-id", method = RequestMethod.DELETE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity softDeleteHotelRaw(
+      @RequestParam("file") MultipartFile file) {
+    softDeleteHotelRawService.softDelete(file);
+    return ResponseEntity.ok("ok");
+  }
+
+  @RequestMapping(path = "/sync-atlas-master-by-hotel-id", method = RequestMethod.PATCH, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity syncAtlasMasterByHotelId(
+      @RequestParam("file") MultipartFile file){
+    syncAtlasIdService.syncAtlasMaster(file);
+    return ResponseEntity.ok("ok");
+  }
+
+  @RequestMapping(path = "/cron-upload-image-to-lightroom-cdn", method = RequestMethod.POST)
+  public ResponseEntity cronUploadImageToLightRoomCdn(
+      @RequestParam(defaultValue = "0") Integer isDeleted,
+      @RequestParam(defaultValue = "AGODA") String vendorName,
+      @RequestParam(defaultValue = "hotel") String type,
+      @RequestParam(defaultValue = "1") Integer limit){
+    cronUploadImageToLightRoomCdn.process(isDeleted, vendorName, type, limit).subscribe();
+    return ResponseEntity.ok("ok");
+  }
 }

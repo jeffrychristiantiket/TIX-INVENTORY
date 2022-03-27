@@ -5,7 +5,10 @@ import com.tiket.inventory.request.SyncHotelToSearchRequest;
 import io.reactivex.Completable;
 import io.reactivex.schedulers.Schedulers;
 import java.io.InputStream;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
@@ -32,35 +35,39 @@ public class PublishHotel extends BaseService {
         List<String> lines = validateCsvHeaderAndReturnsCsvDataStrings(data, HOTEL_HEADER);
         String hotelId = "";
         int count = 0;
+        Set<String> set = new HashSet<>();
         for (String line : lines) {
-          System.out.println("count : " + ++count);
           String[] split = line.split(",");
           hotelId = split[0].trim();
-          System.out.println("Hotel ID : " + hotelId);
+          set.add(hotelId);
+        }
 
-          LinkedMultiValueMap<String, String> headers = defaultHeaders();
+        final String id = StringUtils.join(set, ",");
 
-          String url;
-          HttpEntity<String> entity;
-          ResponseEntity<String> response;
+        System.out.println("count : " + ++count);
+        System.out.println("Hotel IDs : " + id);
 
-          String json;
-          headers.set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-          headers.set(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
-          url = hotelCoreHost + "/tix-hotel-core/hotel/sync-hotel-to-search";
-          SyncHotelToSearchRequest request = SyncHotelToSearchRequest.builder().hotelIds(hotelId).build();
-          json = JSONHelper.convertObjectToJsonInString(request);
-          entity = new HttpEntity<>(json, headers);
-          response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
-          if (response.getStatusCode().is2xxSuccessful()) {
-            String b = response.getBody();
-            System.out.println("PUBLISH HOTEL TO B2C SUCCESS - " + b + " - " + hotelId);
-          }
+        LinkedMultiValueMap<String, String> headers = defaultHeaders();
 
-          if (!response.getStatusCode().is2xxSuccessful()) {
-            LOGGER.error("ERROR publish to b2c hotel hotelId : {}, hotelId : {}", hotelId);
-          }
-          Thread.sleep(500L);
+        String url;
+        HttpEntity<String> entity;
+        ResponseEntity<String> response;
+
+        String json;
+        headers.set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+        headers.set(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
+        url = hotelCoreHost + "/tix-hotel-core/hotel/sync-hotel-to-search";
+        SyncHotelToSearchRequest request = SyncHotelToSearchRequest.builder().hotelIds(id).build();
+        json = JSONHelper.convertObjectToJsonInString(request);
+        entity = new HttpEntity<>(json, headers);
+        response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+        if (response.getStatusCode().is2xxSuccessful()) {
+          String b = response.getBody();
+          System.out.println("PUBLISH HOTEL TO B2C SUCCESS - " + b + " - " + id);
+        }
+
+        if (!response.getStatusCode().is2xxSuccessful()) {
+          LOGGER.error("ERROR publish to b2c hotel hotelId : {}, hotelId : {}", id);
         }
       } catch (Exception e) {
         e.printStackTrace();

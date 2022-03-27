@@ -70,7 +70,7 @@ public class SyncAtlasIdService extends BaseService {
               if (!CollectionUtils.isEmpty(baseResponse.getData().getContent())) {
                 for (Content content : baseResponse.getData().getContent()) {
                   String hotelId = content.getHotelId();
-                  syncHotelAtlasIdByLonLat(hotelId);
+                  syncAtlasMasterByHotelId(hotelId);
                 }
               }
             }
@@ -85,7 +85,23 @@ public class SyncAtlasIdService extends BaseService {
     }
   }
 
-  public void syncHotelAtlasIdByLonLat(String hotelId){
+  public void syncAtlasMaster(MultipartFile file){
+    try (InputStream inputStream = file.getInputStream()) {
+      String data = new String(FileCopyUtils.copyToByteArray(inputStream));
+      List<String> lines = validateCsvHeaderAndReturnsCsvDataStrings(data, List.of("hotelId".trim()));
+      int count = 0;
+      for (String line : lines) {
+        String[] split = line.trim().split(",");
+        String hotelId = split[0].trim();
+        LOG.info("syncAtlasMaster : {}, {}", count++, hotelId);
+        syncAtlasMasterByHotelId(hotelId);
+      }
+    } catch (Exception e) {
+      LOG.error("ERR : ", e);
+    }
+  }
+
+  public void syncAtlasMasterByHotelId(String hotelId){
 
     String url;
     String urlTemplate;
@@ -107,7 +123,7 @@ public class SyncAtlasIdService extends BaseService {
     response = restTemplate.exchange(urlTemplate, HttpMethod.PATCH, entity, String.class, params);
     if (response.getStatusCode().is2xxSuccessful()) {
       String b = response.getBody();
-      System.out.println(b);
+      LOG.info("RESPONSE : {}", b);
     }
     if (!response.getStatusCode().is2xxSuccessful()) {
       LOG.error("ERROR status : {}, body : {}, at hotelId {}", response.getStatusCode(), response.getBody(), hotelId);

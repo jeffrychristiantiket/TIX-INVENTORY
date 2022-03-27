@@ -69,7 +69,7 @@ public class SyncHotelRawToHotel extends BaseService {
     List<Single<Boolean>> tasks = new ArrayList<>();
     int httpDelay = 0;
     for (String hotelId : hotelIds) {
-      if (httpDelay >= 100) {
+      if (httpDelay >= 10) {
         try {
           Thread.sleep(2500L);
         } catch (InterruptedException e) {
@@ -99,16 +99,18 @@ public class SyncHotelRawToHotel extends BaseService {
       ResponseEntity<String> response;
       String url;
       try {
-        url = hotelCoreHost + "/tix-hotel-core/sync/hotel-blocking";
+        url = hotelCoreHost + "/tix-hotel-core/sync/hotel-alternative";
         entity = new HttpEntity<>(defaultHeaders());
         urlTemplate = UriComponentsBuilder.fromHttpUrl(url)
-            .queryParam("hotelId", "{hotelId}")
+            .queryParam("hotelIds", "{hotelIds}")
             .queryParam("vendorName", "{vendorName}")
+            .queryParam("async", "{async}")
             .encode()
             .toUriString();
         params = new HashMap<>();
-        params.put("hotelId", hotelId.trim());
+        params.put("hotelIds", hotelId.trim());
         params.put("vendorName", vendor);
+        params.put("async", "false");
         response = restTemplate.exchange(urlTemplate, HttpMethod.GET, entity, String.class, params);
         if (response.getStatusCode().is2xxSuccessful()) {
           LOG.info("SYNC SUCCESS - hotelId {}, response : {}", hotelId.trim(), response);

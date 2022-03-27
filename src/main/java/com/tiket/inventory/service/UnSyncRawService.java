@@ -1,47 +1,40 @@
 package com.tiket.inventory.service;
 
 import com.tiket.inventory.lib.JSONHelper;
-import com.tiket.inventory.request.QueryDeletedAndSyncRequest;
-import com.tiket.inventory.request.QueryDeletedRequest;
+import com.tiket.inventory.request.QueryUnSyncRequest;
 import java.io.InputStream;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.FileCopyUtils;
 import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
-public class SyncIsDeleted extends BaseService {
-  private static final Logger LOGGER = LoggerFactory.getLogger(SyncIsDeleted.class);
+public class UnSyncRawService extends BaseService {
 
-  public static final List<String> HOTEL_HEADER =
-      Arrays.asList("_id".trim());
+  private static final Logger LOGGER = LoggerFactory.getLogger(UnSyncRawService.class);
 
+  public static final List<String> HEADER = List.of("_id".trim());
 
-  public void replaceDeleted(MultipartFile file){
+  public void unSyncRaw(MultipartFile file, String collectionName){
     try (InputStream inputStream = file.getInputStream()) {
       String data = new String(FileCopyUtils.copyToByteArray(inputStream));
-      List<String> lines = validateCsvHeaderAndReturnsCsvDataStrings(data, HOTEL_HEADER);
+      List<String> lines = validateCsvHeaderAndReturnsCsvDataStrings(data, HEADER);
+      int count = 0;
       for (String line : lines) {
-        String[] split = line.split(",");
+        String[] split = line.trim().split(",");
         String mongoId = split[0].trim();
-        LOGGER.info("SYNC ID : {}", mongoId);
+
+        LOGGER.info("UN_SYNC : {}, {}, collection : {}", count++, mongoId, collectionName);
+
         LinkedMultiValueMap<String, String> headers = defaultHeaders();
 
         String url;
@@ -51,8 +44,7 @@ public class SyncIsDeleted extends BaseService {
 
         String json;
         String queryUpdateType = "SET";
-        String collectionName = "hotel_raw";
-        QueryDeletedAndSyncRequest body = QueryDeletedAndSyncRequest.builder().isDeleted(1).isSynced(0).build();
+        QueryUnSyncRequest body = QueryUnSyncRequest.builder().isSynced(0).build();
         json = JSONHelper.convertObjectToJsonInString(body);
         entity = new HttpEntity<>(json, headers);
         url = hotelCoreHost + "/tix-hotel-core/master/execute-query";
@@ -70,9 +62,9 @@ public class SyncIsDeleted extends BaseService {
         ResponseEntity<String> response = restTemplate.exchange(urlTemplate, HttpMethod.POST, entity, String.class, params);
         if (response.getStatusCode().is2xxSuccessful()) {
           String b = response.getBody();
-          System.out.println("REPLACE DELETED SUCCESS - " + b + " - " + mongoId);
+          System.out.println("UN SYNC RAW SUCCESS - " + b + " - " + mongoId);
         }
-        Thread.sleep(200L);
+        Thread.sleep(100L);
       }
     } catch (Exception e) {
       LOGGER.error("ERR : ", e);
